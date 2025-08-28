@@ -15,7 +15,7 @@ def cartoplot(lon, lat, data,
               show=True,
               hem='n',
               color_scale=(None,None),
-              color_scheme='plasma',
+              color_scheme='binary',
               cbar_label=""):
     
     """
@@ -57,6 +57,7 @@ def cartoplot(lon, lat, data,
     cbar = fig.colorbar(m)
     if cbar_label:
         cbar.set_label(cbar_label)
-        
+
+    #fig.savefig("/Users/theajonsson/Desktop/SSM_I.png", dpi=300, bbox_inches='tight')    
     plt.show()
 
