@@ -1,122 +1,151 @@
+"""
+File:       NN.py
+Purpose:    Neural network based on Soriot et al. (https://doi.org/10.1029/2022EA002542)
+            Training on a dataset of TBs on different microwave channels and corresponding SIT value of that time period
+            Different ways to evaluate the model on the test data
+
+Function:   train_model
+
+Other:      Created by Thea Jonsson 2025-08-19
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error
+from scipy.stats import linregress
 
 
-# BASIC NN MODEL
-# --------------------------------------------------
+
+# Define the MLP: input -> tanh hidden -> linear output
 class Model(nn.Module):
-    # Input layer (4 features), Hidden layers (tot 2 st med x # of neuroner), Output layer (3 classes)
-    def __init__(self, in_features=4, h1=8, h2=9, h3=4, out_features=3):
-        super().__init__() # Instantiate nn.Module (skapa ett objekt som har de egenskaper som tillhör en viss klass)
-        self.fc1 = nn.Linear(in_features, h1)
-        self.fc2 = nn.Linear(h1, h2)
-        self.fc3 = nn.Linear(h2, h3)
-        self.out = nn.Linear(h3, out_features)
-    
+    def __init__(self, in_features=4, n_hidden=50, n_outputs=1):
+        super(Model, self).__init__()
+        self.hidden = nn.Linear(in_features, n_hidden)  
+        self.activation = nn.Tanh()                     
+        self.output = nn.Linear(n_hidden, n_outputs)    
+
     def forward(self, x):
-        x = F.tanh(self.fc1(x))     # Aktiveringsfunk. ReLU, tanh
-        x = F.tanh(self.fc2(x))
-        x = F.tanh(self.fc3(x))
-        x = self.out(x)
-        
+        x = self.hidden(x)
+        x = self.activation(x)
+        x = self.output(x)          
         return x
 
-torch.manual_seed(50)       # Random manual seed for randomization
-model = Model()             # Instance for model
 
 
-# LOAD DATA AND TRAIN NN MODEL 
-# --------------------------------------------------
-url = "https://gist.githubusercontent.com/curran/a08a1080b88344b0c8a7/raw/0e7a9b0a5d22642a06d3d5b9bcbad9890c8ee534/iris.csv"
-my_df = pd.read_csv(url)
+def train_model(data, seed=100, 
+                test_size=0.3, random_state=42, # x% is the test size
+                lr=0.01,        # learning rate 
+                epochs=200):    # number of runs through all the training data
 
-my_df["species"] = my_df["species"].replace({
-    "setosa": 0.0,
-    "versicolor": 1.0,
-    "virginica": 2.0
-})
+    torch.manual_seed(seed)       # Random manual seed for randomization
 
-X = my_df.drop("species", axis=1)
-y = my_df["species"]
-X = X.values
-y = y.values
+    X = data.drop(["SIT", "X_SIT", "Y_SIT"], axis=1).values        # Input to model: TBs for different channels
+    y = data[["SIT", "X_SIT", "Y_SIT"]].values                     # What model should predict: SIT
 
-# Train test splits
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42) # 30% är testset
-X_train = torch.FloatTensor(X_train)
-X_test = torch.FloatTensor(X_test)
-y_train = torch.LongTensor(y_train) # Long tensors 64-bit int
-y_test = torch.LongTensor(y_test)
+    # Scale data
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
 
-# Criterion of model to measure the error (far off the prediction are from the data)
-criterion = nn.CrossEntropyLoss()
-# Optimizer (Adam), lr-learning rate (lower->takes longer to learn and train)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-
-# Train the model
-epochs = 100 # of runs through all the training data 
-losses = []
-for i in range(epochs):
-    # Prediction result
-    y_pred = model.forward(X_train)
-
-    # Loss/error
-    loss = criterion(y_pred, y_train)
-
-    # Keep track of the losses
-    losses.append(loss.detach().numpy())
-
-    if i % 10 == 0:
-        print(f"Epoch {i} and loss: {loss}")
+    # Train test splits
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=test_size, random_state=random_state)
     
-    # Back propogation (to fine tune the weights)
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
+    X_train = torch.FloatTensor(X_train)
+    X_test = torch.FloatTensor(X_test)
+    y_train = torch.FloatTensor(y_train[:,0]).unsqueeze(1)
+    y_test_xy = y_test[:,1:]
+    y_test = torch.FloatTensor(y_test[:,0]).unsqueeze(1)
 
-plt.plot(range(epochs), losses)
-plt.ylabel("loss/error")
-plt.xlabel("Epoch")
+    # Criterion of model to measure the error
+    model = Model()              # Instance for model
+    criterion = nn.MSELoss()     # Mean Squared Error Loss - cont. numerical value, calc. squared diff. between predicted and target values
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)   
 
-#plt.show()
+    # Train the model
+    losses = []
+    for epoch in range(epochs):
 
+        y_pred = model.forward(X_train)   # Prediction results
 
-# EVALUATE TEST DATA ON NN
-# --------------------------------------------------
-# Validate model on test set
-with torch.no_grad():   # Turn off back propogation
-    y_eval = model.forward(X_test)
-    loss = criterion(y_eval, y_test)
+        loss = criterion(y_pred, y_train)
+        losses.append(loss.detach().numpy())
 
-correct = 0
-with torch.no_grad():
-    for i, data in enumerate(X_test):
-        y_val = model.forward(data)
+        if epoch % 50 == 0:
+            print(f"Epoch {epoch} and loss: {loss}")
+        
+        # Back propogation (to fine tune the weights)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-        print(f"{i+1}.) {str(y_val)} \t {y_test[i]} \t {y_val.argmax().item()}")  # Type of class the network think it is (highest number)
+    plt.plot(range(epochs), losses)
+    plt.ylabel("loss/error")
+    plt.xlabel("Epoch")
+    plt.show()
 
-        # Correct or not
-        if y_val.argmax().item() == y_test[i]:
-            correct += 1
-    print(f"Number of correct: {correct}")
-
-    
-# EVALUATE NEW DATA ON THE NETWORK
-# --------------------------------------------------
-new_iris = torch.tensor([5.9, 3.0, 5.1, 1.8])
-
-with torch.no_grad():
-    print(model(new_iris))
+    print("Träningen är klar")
 
 
-# SAVE AND LOAD NN MODEL
-# --------------------------------------------------
-torch.save(model.state_dict(), "Test_NN.pt")
 
-new_model = Model()
-new_model.load_state_dict(torch.load("Test_NN.pt"))
-print(new_model.eval())
+
+    # Predict on test data with scatter plot
+    if True:
+        with torch.no_grad():
+            y_pred_test = model(X_test)
+
+        y_test_np = y_test.numpy().flatten()        # y_test 30%:an av SIT
+        y_pred_np = y_pred_test.numpy().flatten()   # y_pred 30%:an av X_test
+
+        # Linear regression
+        slope, intercept, r_value, p_value, std_err = linregress(y_test_np, y_pred_np)
+        r_squared = r_value**2
+
+        # RMSE calculation
+        rmse = mean_squared_error(y_test_np, y_pred_np, squared=False)
+        
+        plt.scatter(y_test_np, y_pred_np, alpha=0.6, label="Data")
+        plt.plot(y_test_np, intercept + slope * y_test_np, color='red', label=f"Fitted line (R-squared: {r_squared:.3f}, RMSE={rmse:.3f})")
+        plt.xlabel("True SIT values")
+        plt.ylabel("Predicted SIT values")
+        plt.legend()
+        plt.grid(True)
+        plt.ylim(0, 8)
+        plt.xlim(0, 8)
+        #plt.savefig("/Users/theajonsson/Desktop/OneMonth.png", dpi=300, bbox_inches="tight")
+        plt.show()
+        
+
+
+    # Evaluate model on test data set by plotting with cartoplot
+    if False:
+        # TrainingData_TB_xy: All TBs for one day, only filtered for FillValue and if one TB is NaN whole row is deleted
+        # TrainingData_full_month_SSTrainingData_full_month_SSMIS_xy: All TBs for a whole month, all filters used
+        TB = pd.read_csv("/Users/theajonsson/Desktop/TrainingData_TB_xy.csv")
+
+        Test_TB = TB.drop(["x", "y"], axis=1).values
+        TB_xy =  TB[["x", "y"]].values 
+
+        Test_TB = scaler.fit_transform(Test_TB)
+        Test_TB = torch.FloatTensor(Test_TB)
+
+        with torch.no_grad():
+            y_eval = model.forward(Test_TB)
+
+        from cartoplot import multi_cartoplot
+        multi_cartoplot([TB_xy[:,0]], [TB_xy[:,1]], [y_eval], cbar_label="Sea ice thickness [m]")
+
+
+
+
+
+# -------------------- MAIN --------------------       
+
+#data = pd.read_csv("/Users/theajonsson/Desktop/TrainingData_full_month_SSMIS_xy.csv")
+
+data = pd.read_csv("/Users/theajonsson/Desktop/TrainingData_SSMIS_xy.csv")
+train_model(data)

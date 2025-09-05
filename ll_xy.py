@@ -1,23 +1,29 @@
+"""
+File:       ll_xy.py
+Purpose:    Provides function to be able to convert between two different coordinate systems (GCS/PCS) 
+
+Function:   lonlat_to_xy
+
+Other:      Based on Robbie Mallet's ll_xy.py (https://github.com/robbiemallett/custom_modules/blob/master/ll_xy.py) 
+            Modified by Thea Jonsson since 2025-08-20
+"""
+
 from pyproj import Proj, Transformer
 import numpy as np
 
+
+
+"""
+Function:   lonlat_to_xy
+Purpose:    Converts longitude/latitude and EASE xy coordinates
+
+Input:      lon (float): WGS84 longitude
+            lat (float): WGS84 latitude
+            hemisphere (string): 'n' or 's'
+            inverse (bool): if true, converts xy to lon/lat
+Return:     x/y or lon/lat (float)
+"""
 def lonlat_to_xy(coords_1, coords_2, hemisphere, inverse=False):
-
- 
-
-    """Converts between longitude/latitude and EASE xy coordinates.
- 
-    Args:
-        lon (float): WGS84 longitude
-        lat (float): WGS84 latitude
-        hemisphere (string): 'n' or 's'
-        inverse (bool): if true, converts xy to lon/lat
- 
-    Returns:
-        tuple: pair of xy or lon/lat values
-    """
-
- 
 
     EASE_Proj = {'n': 'EPSG:3408',
                  's': 'EPSG:3409'}
