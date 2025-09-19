@@ -91,6 +91,8 @@ def train_model(data, seed=100,
 
     print("Training is done")
 
+
+
     # Save model
     if True:
         model_save = {
@@ -101,8 +103,6 @@ def train_model(data, seed=100,
 
     
   
-
-
     """ ==========================================================================================
             3 different type of plots to check for different things to consider
     ========================================================================================== """
@@ -298,6 +298,8 @@ if False:
     NN_model = torch.load("/Users/theajonsson/Desktop/1Day_Con/Kernel500/SSMIS_1day_model_epoch5000.pth")
     model.load_state_dict(NN_model["model_state_dict"])
     scaler = NN_model["scaler"]
+
+
 
 """ ==========================================================================================
             2 different type of plots to check for different things to consider

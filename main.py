@@ -191,13 +191,13 @@ if False:
 
 # Training data (.csv) used for the NN.py for ONE DAY for SSMIS
 """ ========================================================================================== """
-if True:
+if False:
   file_paths = ["ESACCI-SEAICE-L2P-SITHICK-RA2_ENVISAT-NH-20110313-fv2.0.nc", # SIT
                 "BTRin20060313000000424SSF1601GL.nc" # TB
                 ]
 
   x_SIT, y_SIT, SIT = fTBd.format_SIT(file_paths[0])
-  
+
   columns = ["TB_V19", "TB_H19", "TB_V37", "TB_H37", "SIT", "X_SIT", "Y_SIT"]
   df_TB_SSMIS = pd.DataFrame(columns=columns) 
   index = 0

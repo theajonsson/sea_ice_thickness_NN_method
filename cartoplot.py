@@ -94,7 +94,6 @@ def multi_cartoplot(coords_1, coords_2, data,
     # Set up for multiple plots
     plot_size = len(data)
     nr = len(coords_1)
- 
     for i, arr in enumerate(data):
 
         if plot_size > 2:
@@ -124,3 +123,4 @@ def multi_cartoplot(coords_1, coords_2, data,
         fig.savefig(dir+save_name+save_format, dpi=300, bbox_inches="tight")
     else:    
         plt.show()
+

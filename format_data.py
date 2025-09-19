@@ -20,7 +20,7 @@ from scipy.spatial import KDTree
 
 """
 Function:   convolve_SIT
-Purpose:    Average the SIT values with a kernel size based on the distance between each data point
+Purpose:    Average the SIT values with a kernel size
 
 Input:      SIT (float)
 Return:     SIT_avg (float)
