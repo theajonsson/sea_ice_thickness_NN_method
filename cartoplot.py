@@ -123,4 +123,3 @@ def multi_cartoplot(coords_1, coords_2, data,
         fig.savefig(dir+save_name+save_format, dpi=300, bbox_inches="tight")
     else:    
         plt.show()
-

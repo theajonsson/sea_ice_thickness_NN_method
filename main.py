@@ -3,7 +3,7 @@ File:       main.py
 Purpose:    Create training data for the NN.py
             Divided into three larger sections: TD for one month (SSMIS), TD for one day (SSMIS), TD for one day (SSM/I)
             The training data (TD) is filtered for different things with format_data.py,
-            5 plots can be plotted for each TD section
+            5 plots can be plotted for each TD section 
 
 Needs:      cartoplot.py, format_data.py
 

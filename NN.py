@@ -102,7 +102,7 @@ def train_model(data, seed=100,
         torch.save(model_save,"/Users/theajonsson/Desktop/SSMIS_1day_model_epoch5000.pth")
 
     
-  
+
     """ ==========================================================================================
             3 different type of plots to check for different things to consider
     ========================================================================================== """
