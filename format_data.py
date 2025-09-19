@@ -16,6 +16,37 @@ from scipy.spatial import KDTree
 
 
 
+
+
+"""
+Function:   convolve_SIT
+Purpose:    Average the SIT values with a kernel size based on the distance between each data point
+
+Input:      SIT (float)
+Return:     SIT_avg (float)
+"""
+def convolve_SIT(SIT, kernel=5, debug=False):
+    
+    SIT_avg = np.convolve(SIT, np.ones(kernel)/kernel, mode="valid")
+
+    if debug:
+        fig = plt.figure(figsize=[10,6])
+        ax = fig.add_subplot(2,1,1)
+        ax.plot(SIT, color="Blue")
+        ax.plot([0, 40000], [np.mean(SIT), np.mean(SIT)], color="red", label=f"Mean SIT {np.mean(SIT)}")
+        ax.set_title("SIT Unfilterd")
+        ax.legend()
+        ax = fig.add_subplot(2,1,2)
+        ax.plot(SIT_avg, color="Blue")
+        ax.plot([0, 40000], [np.mean(SIT_avg), np.mean(SIT_avg)], color="red", label=f"Mean SIT {np.mean(SIT_avg)}")
+        ax.set_title(f"SIT Filtered with: {kernel}")
+        ax.legend()
+        plt.show()
+
+    return SIT_avg
+
+
+
 """
 Function:   nearest_neighbor
 Purpose:    Find closest TB data point to each SIT data point
@@ -47,8 +78,8 @@ def nearest_neighbor(x_SIT, y_SIT, x_TB, y_TB, TB):
 """
 Function:   format_SIT
 Purpose:    Format file from the RA-2 instrument on the Envisat satellite
-            Read NetCDF file, loads data(lon, lat, SIT) and replaces fillvalue with NaN, 
-            filter all data below 60°N lat and removes NaN, converts lon/lat into x/y coordinates
+            Read NetCDF file, loads data(lon, lat, SIT) and replaces fillvalue with NaN, filter all data below 60°N lat and removes NaN, 
+            uses function convolve_SIT() to average SIT values, converts lon/lat into x/y coordinates 
 
 Input:      file_paths (string)
 Return:     x_SIT (float)
@@ -62,19 +93,30 @@ def format_SIT(file_paths, lat_level=60, hemisphere="n"):
     lat_SIT = np.array(dataset["lat"])
     SIT = dataset["sea_ice_thickness"][:].filled(np.nan)     # NaN instead of _FillValue=9.969209968386869e+36
     dataset.close()
-
+ 
     lat_SIT = np.where(lat_SIT<lat_level, np.nan, lat_SIT)
-    mask = np.where(~np.isnan(lat_SIT))         
-    lat_SIT = lat_SIT[mask]
-    lon_SIT = lon_SIT[mask]
-    SIT = SIT[mask]               
+    mask_lat = np.where(~np.isnan(lat_SIT))         
+    lat_SIT = lat_SIT[mask_lat]
+    lon_SIT = lon_SIT[mask_lat]
+    SIT = SIT[mask_lat]
+   
+    SIT = np.where(SIT<0, np.nan, SIT)
+    mask_neg = np.where(~np.isnan(SIT)) # leave as nan
+    lat_SIT = lat_SIT[mask_neg]
+    lon_SIT = lon_SIT[mask_neg]
+    SIT = SIT[mask_neg]
 
-    mask_SIT = np.isnan(SIT)
-    SIT = SIT[~mask_SIT]
-    lon_SIT = lon_SIT[~mask_SIT]
-    lat_SIT = lat_SIT[~mask_SIT]  
+    mask_nan = np.isnan(SIT)
+    SIT = SIT[~mask_nan]
+    lat_SIT = lat_SIT[~mask_nan] 
+    lon_SIT = lon_SIT[~mask_nan] 
 
+    SIT = convolve_SIT(SIT, kernel=500)
+  
     x_SIT,y_SIT = lonlat_to_xy(lon_SIT, lat_SIT, hemisphere)
+
+    x_SIT = x_SIT[:len(SIT)]
+    y_SIT = y_SIT[:len(SIT)]
 
     return x_SIT, y_SIT, SIT
 

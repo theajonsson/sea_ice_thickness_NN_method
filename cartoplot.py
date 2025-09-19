@@ -50,7 +50,7 @@ def make_ax(fig, ax, data,
     m = ax.scatter(data[0], data[1], c=data[2],
                     s = 0.001,
                     transform=ccrs.epsg('3408'),
-                    zorder=0)
+                    zorder=0, cmap="viridis_r")#,vmin=0, vmax=6)
     ax.set_title(title)
 
     cb = plt.colorbar(m, cax=ax_cb)
@@ -94,7 +94,7 @@ def multi_cartoplot(coords_1, coords_2, data,
     # Set up for multiple plots
     plot_size = len(data)
     nr = len(coords_1)
-
+ 
     for i, arr in enumerate(data):
 
         if plot_size > 2:
@@ -103,7 +103,7 @@ def multi_cartoplot(coords_1, coords_2, data,
             ax = fig.add_subplot(1, 2, i+1, projection=proj)
 
         if nr > 1:
-            plt_data = [np.array(coords_1)[i,:], np.array(coords_2)[i,:], arr]
+            plt_data = [coords_1[i], coords_2[i], arr]
         else:
             plt_data = [coords_1, coords_2, arr]
 
