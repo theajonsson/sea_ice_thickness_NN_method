@@ -24,14 +24,23 @@ from scipy.stats import linregress
 
 # Define the MLP: input -> tanh hidden -> linear output
 class Model(nn.Module):
-    def __init__(self, in_features=4, n_hidden=50, n_outputs=1):
+    def __init__(self, in_features=5, n_hidden=40, n_outputs=1):
         super(Model, self).__init__()
-        self.hidden = nn.Linear(in_features, n_hidden)  
+        self.hidden1 = nn.Linear(in_features, n_hidden)
+        self.hidden2 = nn.Linear(n_hidden, n_hidden)
+        self.hidden3 = nn.Linear(n_hidden, n_hidden)
+        self.hidden4 = nn.Linear(n_hidden, n_hidden)
         self.activation = nn.Tanh()                     
         self.output = nn.Linear(n_hidden, n_outputs)    
 
     def forward(self, x):
-        x = self.hidden(x)
+        x = self.hidden1(x)
+        x = self.activation(x)
+        x = self.hidden2(x)
+        x = self.activation(x)
+        x = self.hidden3(x)
+        x = self.activation(x)
+        x = self.hidden4(x)
         x = self.activation(x)
         x = self.output(x)          
         return x
@@ -45,8 +54,8 @@ def train_model(data, seed=100,
 
     torch.manual_seed(seed)       # Random manual seed for randomization
 
-    X = data.drop(["SIT", "X_SIT", "Y_SIT"], axis=1).values        # Input to model: TBs for different channels
-    y = data[["SIT", "X_SIT", "Y_SIT"]].values                     # What model should predict: SIT
+    X = data[["TB_V19", "TB_H19", "TB_V22", "TB_V37", "TB_H37"]].values        # Input to model: TBs for different channels "GR_V", "GR_H", "PR_19", "PR_37"
+    y = data[["SIT", "X_SIT", "Y_SIT"]].values                     # Model predict: SIT
 
     # Scale data
     scaler = StandardScaler()
@@ -83,11 +92,13 @@ def train_model(data, seed=100,
         loss.backward()
         optimizer.step()
 
-    """ # Plot of loss/epoch
-    plt.plot(range(epochs), losses)
-    plt.ylabel("loss/error")
-    plt.xlabel("Epoch")
-    plt.show() """
+    # Plot of loss/epoch
+    if False:
+        plt.plot(range(epochs), losses)
+        plt.ylabel("loss/error")
+        plt.xlabel("Epoch")
+        plt.savefig("/Users/theajonsson/Desktop/Loss.png", dpi=300, bbox_inches="tight")
+        plt.show()
 
     print("Training is done")
 
@@ -99,7 +110,7 @@ def train_model(data, seed=100,
             "model_state_dict": model.state_dict(),
             "scaler": scaler
         }
-        torch.save(model_save,"/Users/theajonsson/Desktop/SSMIS_1day_model_epoch5000.pth")
+        torch.save(model_save,"/Users/theajonsson/Desktop/SSMIS_1month.pth")
 
     
 
@@ -108,9 +119,9 @@ def train_model(data, seed=100,
     ========================================================================================== """
     # Plot with 4 subfigures: TB for each channel (y-axis) against predicted SIT (x-axis), with fitted line, R^2 score, RMSE value
     if False:
-        fig, axes = plt.subplots(2,2, figsize=[10,5])
+        fig, axes = plt.subplots(2,3, figsize=[10,5])
         axes = axes.flatten()
-        channel = ["TB_V19", "TB_H19", "TB_V37", "TB_H37"]
+        channel = ["TB_V19", "TB_H19", "TB_V22", "TB_V37", "TB_H37"]
 
         with torch.no_grad():
             y_pred = (np.array(model.forward(X_test))).flatten() #Gives pred SIT value on Test TB data
@@ -142,11 +153,61 @@ def train_model(data, seed=100,
         #plt.savefig("/Users/theajonsson/Desktop/TBvspredSIT.png", dpi=300, bbox_inches="tight") 
         plt.show()
 
+    if False:
+        with torch.no_grad():
+            y_pred = (np.array(model.forward(X_test))).flatten()
+
+        X_test_TB = scaler.inverse_transform(X_test)
+
+        # Lista på grupper av TB-kanaler
+        channel_groups = [
+            ["TB_V19", "TB_H19"],   # Figur 1
+            ["TB_V22"],             # Figur 2
+            ["TB_V37", "TB_H37"]    # Figur 3
+        ]
+
+
+        # Indexmappning för kanal -> kolumn i X_test_TB
+        channel_order = ["TB_V19", "TB_H19", "TB_V22", "TB_V37", "TB_H37"]
+        channel_indices = {ch: i for i, ch in enumerate(channel_order)}
+
+        # Plot varje grupp
+        for group in channel_groups:
+            fig, axs = plt.subplots(1, len(group), figsize=(7 * len(group), 6), constrained_layout=True)
+
+            if len(group) == 1:
+                axs = [axs]  # Gör till lista
+
+            for ax, channel in zip(axs, group):
+                idx = channel_indices[channel]
+                TB_channel = X_test_TB[:, idx]
+
+                # Linjär regression & RMSE
+                slope, intercept, r_value, p_value, std_err = linregress(y_pred, TB_channel)
+                r_squared = r_value ** 2
+                rmse = mean_squared_error(y_pred, TB_channel, squared=False)
+
+                # Hexbin plot
+                hb = ax.hexbin(y_pred, TB_channel, gridsize=50, mincnt=6)
+
+                # Regressionslinje
+                ax.plot(y_pred, intercept + slope * y_pred, color='red',
+                        label=f"Fitted line\n$R^2$ = {r_squared:.3f}\nRMSE = {rmse:.3f}")
+
+                ax.set_xlabel("Predicted test SIT [m]")
+                ax.set_ylabel(f"{channel} [K]")
+                ax.set_title(f"{channel} vs Predicted SIT")
+                ax.legend()
+                ax.grid(True)
+
+            #plt.savefig("/Users/theajonsson/Desktop/TBvspredSIT_.png", dpi=300, bbox_inches="tight")
+            plt.show()
+
     # Plot with 4 subfigures: Predicted SIT (y-axis) against true SIT (x-axis), with fitted line, R^2 score, RMSE value
     if False:
-        fig, axes = plt.subplots(2,2, figsize=[10,5])
+        fig, axes = plt.subplots(2,3, figsize=[10,5])
         axes = axes.flatten()
-        channel = ["V19", "H19", "V37", "H37"]
+        channel = ["V19", "H19", "V22", "V37", "H37"]
         for i in range(len(X_test[1])):
             ax = axes[i]
             X_test_single = X_test.clone()           
@@ -221,37 +282,18 @@ def train_model(data, seed=100,
             plt.grid(True)
             plt.ylim(0, 5)
             plt.xlim(0, 5)
-            #plt.savefig("/Users/theajonsson/Desktop/SSMIS_1day_hexbin.png", dpi=300, bbox_inches="tight")
+            plt.savefig("/Users/theajonsson/Desktop/SSMIS_1month.png", dpi=300, bbox_inches="tight")
             plt.show()
 
-        if True:
-            fig, ax = plt.subplots(3, 1, figsize=(10, 12))
-
-            ax[0].hist(y_test_np, bins=100, color='blue', edgecolor='black')
-            ax[0].set_title("True Values from SIT")
-            ax[0].set_xlabel("Ice Thickness [m]")
-            ax[0].set_ylabel("Amount [n]")
-            ax[1].hist(y_pred_np, bins=100, color='red', edgecolor='black')
-            ax[1].set_title("Predicted Values for SIT")
-            ax[1].set_xlabel("Ice Thickness [m]")
-            ax[1].set_ylabel("Amount [n]")
-            ax[2].hist(y_test_np, bins=100, color='blue', alpha=0.5 ,edgecolor='black', zorder=3)
-            ax[2].hist(y_pred_np, bins=100, color='red', edgecolor='black', zorder=1)
-            ax[2].set_title("Overlay")
-            ax[2].set_xlabel("Ice Thickness [m]")
-            ax[2].set_ylabel("Amount [n]")
-
-            # Match axes
-            x_min = min(y_test_np.min(), y_pred_np.min())
-            x_max = max(y_test_np.max(), y_pred_np.max())
-            y_max = max(ax[0].get_ylim()[1], ax[1].get_ylim()[1])
-
-            for a in ax:
-                a.set_xlim(x_min, x_max)
-                a.set_ylim(0, y_max)
-
+        if True: 
+            plt.hist(y_test_np, bins=100, color='blue', alpha=0.5 ,edgecolor='black', zorder=3, label="True SIT", histtype='stepfilled')
+            plt.hist(y_pred_np, bins=100, color='red', edgecolor='black', zorder=1, label="Predicted SIT", histtype='stepfilled')
+            plt.title("Overlay")
+            plt.xlabel("Sea Ice Thickness [m]")
+            plt.ylabel("Amount [n]")
+            plt.legend()
+            plt.savefig("/Users/theajonsson/Desktop/SSMIS_1month_hist.png", dpi=300, bbox_inches="tight")
             plt.show()
-
 
 
 
@@ -261,10 +303,10 @@ def train_model(data, seed=100,
 if True:
     start_time = time.time()
     try:
-        data = pd.read_csv("/Users/theajonsson/Desktop/TestShit3.csv")
+        data = pd.read_csv("/Users/theajonsson/Desktop/TD_SSMIS_1month_200603.csv")
     except FileNotFoundError:
         print("Error")
-    train_model(data, epochs=500)
+    train_model(data, epochs=1000, lr=0.01)
 
     end_time = time.time()
     print(f"Elapsed time: {end_time - start_time}")
@@ -293,11 +335,33 @@ if True:
 """ ========================================================================================== """
 # Test the trained model on a different data set
 if False:
-    TestData = pd.read_csv("/Users/theajonsson/Desktop/Test on best kernel (day vs month)/TD_SSMIS_1day_20060331_kernel500.csv")
+    from training_data_SSMIS import synthetic_tracks
+    import os
+
     model = Model()
-    NN_model = torch.load("/Users/theajonsson/Desktop/1Day_Con/Kernel500/SSMIS_1day_model_epoch5000.pth")
+    NN_model = torch.load("/Users/theajonsson/Desktop/FillHole_test/1day/SSMIS_1day_model.pth")
     model.load_state_dict(NN_model["model_state_dict"])
     scaler = NN_model["scaler"]
+
+    filename = "BTRin20060313000000424SSF1601GL.nc"
+    TestData = synthetic_tracks(filename)
+    Test_TB = TestData[["TB_V19", "TB_H19", "TB_V22", "TB_V37", "TB_H37"]].values 
+    TB_xy =  TestData[["X_SIT","Y_SIT"]].values 
+
+    Test_TB = scaler.fit_transform(Test_TB)
+    Test_TB = torch.FloatTensor(Test_TB)
+
+    with torch.no_grad():
+        y_eval = model.forward(Test_TB)
+   
+
+    from format_data import format_SIT
+    file = "/Volumes/Thea_SSD_1T/Master Thesis/Envisat_SatSwath/2006/03/ESACCI-SEAICE-L2P-SITHICK-RA2_ENVISAT-NH-20060331-fv2.0.nc"
+    x_SIT, y_SIT, SIT = format_SIT(file)
+
+    from cartoplot import cartoplot
+    cartoplot([TB_xy[:,0], x_SIT], [TB_xy[:,1], y_SIT], [np.array(y_eval), SIT],cbar_label="Sea ice thickness [m]")
+
 
 
 

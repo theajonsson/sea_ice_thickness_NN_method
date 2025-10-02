@@ -3,13 +3,14 @@ File:       format_data.py
 Purpose:    Provides functions for formating data and performance of necessary steps for further analysis
             Uses file ll_xy.py
 
-Function:   nearest_neighbor, format_SIT, format_SSM_I, format_SSMIS
+Function:   format_SIT, nearest_neighbor, split_tracks, format_SSM_I, format_SSMIS
 
 Other:      Created by Thea Jonsson 2025-08-28
 """
 
 import netCDF4 as nc
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from ll_xy import lonlat_to_xy
 from scipy.spatial import KDTree
@@ -19,31 +20,37 @@ from scipy.spatial import KDTree
 
 
 """
-Function:   convolve_SIT
-Purpose:    Average the SIT values with a kernel size
+Function:   format_SIT
+Purpose:    Format file from the RA-2 instrument on the Envisat satellite
+            Read NetCDF file, loads data(lon, lat, SIT) and replaces fillvalue with NaN, filter all data below 60°N lat and removes NaN, 
+            uses function convolve_SIT() to average SIT values, converts lon/lat into x/y coordinates 
 
-Input:      SIT (float)
-Return:     SIT_avg (float)
+Input:      file_paths (string)
+Return:     x_SIT (float)
+            y_SIT (float)
+            SIT (float)
 """
-def convolve_SIT(SIT, kernel=5, debug=False):
-    
-    SIT_avg = np.convolve(SIT, np.ones(kernel)/kernel, mode="valid")
+def format_SIT(file_paths, lat_level=60, hemisphere="n"):
 
-    if debug:
-        fig = plt.figure(figsize=[10,6])
-        ax = fig.add_subplot(2,1,1)
-        ax.plot(SIT, color="Blue")
-        ax.plot([0, 40000], [np.mean(SIT), np.mean(SIT)], color="red", label=f"Mean SIT {np.mean(SIT)}")
-        ax.set_title("SIT Unfilterd")
-        ax.legend()
-        ax = fig.add_subplot(2,1,2)
-        ax.plot(SIT_avg, color="Blue")
-        ax.plot([0, 40000], [np.mean(SIT_avg), np.mean(SIT_avg)], color="red", label=f"Mean SIT {np.mean(SIT_avg)}")
-        ax.set_title(f"SIT Filtered with: {kernel}")
-        ax.legend()
-        plt.show()
+    dataset = nc.Dataset(file_paths, "r", format="NETCDF4")
+    lon_SIT = np.array(dataset["lon"]).flatten()
+    lat_SIT = np.array(dataset["lat"]).flatten()
+    SIT = dataset["sea_ice_thickness"][:].filled(np.nan).flatten()     # NaN instead of _FillValue=9.969209968386869e+36
+    dataset.close()
 
-    return SIT_avg
+    #mask = (lat_SIT >= lat_level) & ((SIT >= 0) | np.isnan(SIT))
+    mask = (lat_SIT >= lat_level) & (SIT >= 0)
+    lat_SIT = lat_SIT[mask]
+    lon_SIT = lon_SIT[mask]
+    SIT = SIT[mask]
+
+    x_SIT,y_SIT = lonlat_to_xy(lon_SIT, lat_SIT, hemisphere)
+  
+    x_SIT = x_SIT[:len(SIT)]
+    y_SIT = y_SIT[:len(SIT)]
+
+    return x_SIT, y_SIT, SIT
+
 
 
 
@@ -76,49 +83,95 @@ def nearest_neighbor(x_SIT, y_SIT, x_TB, y_TB, TB):
 
 
 """
-Function:   format_SIT
-Purpose:    Format file from the RA-2 instrument on the Envisat satellite
-            Read NetCDF file, loads data(lon, lat, SIT) and replaces fillvalue with NaN, filter all data below 60°N lat and removes NaN, 
-            uses function convolve_SIT() to average SIT values, converts lon/lat into x/y coordinates 
+Function:   split_tracks
+Purpose:    
 
-Input:      file_paths (string)
-Return:     x_SIT (float)
-            y_SIT (float)
-            SIT (float)
+Input:      df ():
+Return:     df_seg():
 """
-def format_SIT(file_paths, lat_level=60, hemisphere="n"):
+def split_tracks(df, distance_segment = 50000):
 
-    dataset = nc.Dataset(file_paths, "r", format="NETCDF4")
-    lon_SIT = np.array(dataset["lon"])
-    lat_SIT = np.array(dataset["lat"])
-    SIT = dataset["sea_ice_thickness"][:].filled(np.nan)     # NaN instead of _FillValue=9.969209968386869e+36
-    dataset.close()
- 
-    lat_SIT = np.where(lat_SIT<lat_level, np.nan, lat_SIT)
-    mask_lat = np.where(~np.isnan(lat_SIT))         
-    lat_SIT = lat_SIT[mask_lat]
-    lon_SIT = lon_SIT[mask_lat]
-    SIT = SIT[mask_lat]
-   
-    SIT = np.where(SIT<0, np.nan, SIT)
-    mask_neg = np.where(~np.isnan(SIT)) # leave as nan
-    lat_SIT = lat_SIT[mask_neg]
-    lon_SIT = lon_SIT[mask_neg]
-    SIT = SIT[mask_neg]
+    # Calculate distance between data points
+    x = df["X_SIT"].values
+    y = df["Y_SIT"].values
+    dx = np.diff(x)
+    dy = np.diff(y)
+    distances = np.sqrt(dx**2 + dy**2)
+    distances = np.insert(distances, 0, 0)  # First data point: distance = 0
 
-    mask_nan = np.isnan(SIT)
-    SIT = SIT[~mask_nan]
-    lat_SIT = lat_SIT[~mask_nan] 
-    lon_SIT = lon_SIT[~mask_nan] 
+    result = {
+        "TB_V19": [], "TB_H19": [], "TB_V22": [], "TB_V37": [], "TB_H37": [], "SIT": [], "X_SIT": [], "Y_SIT": []
+    }
+    temp = {
+        "TB_V19": [], "TB_H19": [], "TB_V22": [], "TB_V37": [], "TB_H37": [], "SIT": [], "X_SIT": [], "Y_SIT": []
+    }
+    cumulative_distance = 0
+    seg = 1
+    for idx in range(len(df)):
+        row = df.iloc[idx]
 
-    SIT = convolve_SIT(SIT, kernel=500)
-  
-    x_SIT,y_SIT = lonlat_to_xy(lon_SIT, lat_SIT, hemisphere)
+        for i in temp:
+            temp[i].append(row[i])
+        
+        cumulative_distance += distances[idx]    
 
-    x_SIT = x_SIT[:len(SIT)]
-    y_SIT = y_SIT[:len(SIT)]
+        if (idx + 1) > (df.shape[0]-1):
+            next_dist = 0                   # Om sista tal, nästa distans är 0
+        else:
+            next_dist = distances[idx+1]    # Nästa distans
+        
+        if (cumulative_distance + next_dist) >= distance_segment:
+            #print(f"Segment({seg}) is: {cumulative_distance * 0.001:.2f} [km] and contains {len(temp['SIT'])} values")
 
-    return x_SIT, y_SIT, SIT
+            # Remove segments with land contamination
+            """ Some code to read the binary file with comments about where the data are from are in Landmask.ipynb
+            use kdtree to find the distance from a given SIT measurement/TB measurement to the nearest land pixel.
+            Just made a small change to show how to plot the mask at the end. Don't foget that "ice" in this case is "land" and can contaminate our pixels"""
+            # Land masking of 35 km (half 70 km FOV of 19 GHz channel)
+            #mask = np.fromfile(file_paths, dtype=np.uint8).reshape((5760, 5760))
+            #land_mask = (mask == 0)
+            # land koordinater
+            #q=1900
+            #lons[q:-q,q:-q],lats[q:-q,q:-q],data[q:-q,q:-q]
+            # KDtree
+
+            # Remove segments where more than x% of values are NaN
+            if np.isnan(temp["SIT"]).sum() * (100 / len(temp["SIT"])) >= 50:
+                for i in temp:
+                    temp[i] = []
+                cumulative_distance = 0
+                continue
+
+            # Average all values in each valid segment with np.nanmean
+            for i in ["TB_V19", "TB_H19", "TB_V22", "TB_V37", "TB_H37", "SIT"]:
+                result[i].append(np.nanmean(temp[i]))
+            
+            # Middle coordinate of the whole segment
+            x_mid = (temp["X_SIT"][-1] + temp["X_SIT"][0]) / 2
+            y_mid = (temp["Y_SIT"][-1] + temp["Y_SIT"][0]) / 2
+            result["X_SIT"].append(x_mid)
+            result["Y_SIT"].append(y_mid)
+
+            for i in temp:
+                temp[i] = []
+            cumulative_distance = 0
+            seg += 1
+
+    # If there are values left after segmenting
+    if temp["SIT"]: 
+        print(f"Segment({seg}) is: {cumulative_distance * 0.001:.2f} [km] and contains {len(temp['SIT'])} values")
+
+        for i in ["TB_V19", "TB_H19", "TB_V22", "TB_V37", "TB_H37", "SIT"]:
+            result[i].append(np.nanmean(temp[i]))
+
+        x_mid = (temp["X_SIT"][-1] + temp["X_SIT"][0]) / 2
+        y_mid = (temp["Y_SIT"][-1] + temp["Y_SIT"][0]) / 2
+        result["X_SIT"].append(x_mid)
+        result["Y_SIT"].append(y_mid)
+
+    df_seg = pd.DataFrame(result)       # 41854 rows x 8 columns -> 777 rows x 8 columns
+
+    return df_seg
 
 
 
@@ -203,8 +256,8 @@ Input:      x_SIT (float)
             channel (int)
 Return:     x_TB (float)
             y_TB (float)
-            TB (float)
-            TB_freq (float)
+            TB (float): masked TB values
+            TB_freq (float): nearest TB values in realationship to the SIT values
             nearest_TB_coords (float, (N,2)-array)
 """
 def format_SSMIS(x_SIT, y_SIT, file_paths, group, channel, 
@@ -220,7 +273,7 @@ def format_SSMIS(x_SIT, y_SIT, file_paths, group, channel,
     mask = np.where(~np.isnan(lat_TB))         
     lat_TB = lat_TB[mask]
     lon_TB = lon_TB[mask]
-    TB = TB[mask] 
+    TB = TB[mask]
   
     x_TB,y_TB = lonlat_to_xy(lon_TB, lat_TB, hemisphere)
 
@@ -246,4 +299,3 @@ def format_SSMIS(x_SIT, y_SIT, file_paths, group, channel,
         plt.show()
 
     return x_TB, y_TB, TB, TB_freq, nearest_TB_coords
-

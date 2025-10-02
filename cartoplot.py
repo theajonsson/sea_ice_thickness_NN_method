@@ -48,7 +48,7 @@ def make_ax(fig, ax, data,
     fig.add_axes(ax_cb)
 
     m = ax.scatter(data[0], data[1], c=data[2],
-                    s = 0.001,
+                    s = 0.1,
                     transform=ccrs.epsg('3408'),
                     zorder=0, cmap="viridis_r")#,vmin=0, vmax=6)
     ax.set_title(title)
@@ -57,6 +57,8 @@ def make_ax(fig, ax, data,
     cb.set_label(cbar_label)
     ax_cb.yaxis.tick_right()
     ax_cb.yaxis.set_tick_params(labelright=True)
+
+
 
 
 
@@ -116,6 +118,70 @@ def multi_cartoplot(coords_1, coords_2, data,
                 land=land, ocean=ocean, bounding_lat=bounding_lat, 
                 gridlines=gridlines, maxlat=maxlat, cbar_label=cbar_label)
 
+        
+    if  save_name:
+        dir = "/Users/theajonsson/Desktop/"
+        save_format = ".png"
+        fig.savefig(dir+save_name+save_format, dpi=300, bbox_inches="tight")
+    else:    
+        plt.show()
+
+
+
+
+
+def cartoplot(coords_1, coords_2, data,
+                title=[],
+                figsize=[10,5],
+                hem='n',
+                land=True, ocean=False,
+                bounding_lat=65,
+                gridlines=True,
+                cbar_label="", save_name="", dot_size=0.1):
+    
+
+    fig = plt.figure(figsize=figsize)
+    
+    if hem == 'n':
+        proj = ccrs.NorthPolarStereo()
+        maxlat=90
+    elif hem =='s':
+        proj = ccrs.SouthPolarStereo()
+        maxlat=-90
+    else:
+        raise
+
+    data_array = [coords_1, coords_2, data]
+
+    ax = fig.add_subplot(1, 1, 1, projection=proj)
+
+
+    if ocean:
+        ax.add_feature(cartopy.feature.OCEAN,zorder=2)
+    if land:
+        ax.add_feature(cartopy.feature.LAND, edgecolor='black',zorder=1)
+
+    ax.set_extent([-180, 180, maxlat, bounding_lat], ccrs.PlateCarree())
+
+    if gridlines:
+        ax.gridlines()
+
+    divider = make_axes_locatable(ax)
+    ax_cb = divider.append_axes("right",size="5%", pad=0.05, axes_class=plt.Axes)
+    fig = ax.get_figure()
+    fig.add_axes(ax_cb)
+
+    for i in range(len(data)):
+        m = ax.scatter(coords_1[i], coords_2[i], c=data[i],
+                        s = dot_size,
+                        transform=ccrs.epsg('3408'),
+                        zorder=0, cmap="viridis_r", vmin=0, vmax=6)
+    ax.set_title(title)
+
+    cb = plt.colorbar(m, cax=ax_cb)
+    cb.set_label(cbar_label)
+    ax_cb.yaxis.tick_right()
+    ax_cb.yaxis.set_tick_params(labelright=True)
         
     if  save_name:
         dir = "/Users/theajonsson/Desktop/"
