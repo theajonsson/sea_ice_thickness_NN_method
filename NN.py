@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics import mean_squared_error
 from scipy.stats import linregress
 
@@ -24,23 +24,14 @@ from scipy.stats import linregress
 
 # Define the MLP: input -> tanh hidden -> linear output
 class Model(nn.Module):
-    def __init__(self, in_features=5, n_hidden=40, n_outputs=1):
+    def __init__(self, in_features=5, n_hidden=4, n_outputs=1):
         super(Model, self).__init__()
         self.hidden1 = nn.Linear(in_features, n_hidden)
-        self.hidden2 = nn.Linear(n_hidden, n_hidden)
-        self.hidden3 = nn.Linear(n_hidden, n_hidden)
-        self.hidden4 = nn.Linear(n_hidden, n_hidden)
-        self.activation = nn.Tanh()                     
+        self.activation = nn.Tanh()                       
         self.output = nn.Linear(n_hidden, n_outputs)    
 
     def forward(self, x):
         x = self.hidden1(x)
-        x = self.activation(x)
-        x = self.hidden2(x)
-        x = self.activation(x)
-        x = self.hidden3(x)
-        x = self.activation(x)
-        x = self.hidden4(x)
         x = self.activation(x)
         x = self.output(x)          
         return x
@@ -55,7 +46,7 @@ def train_model(data, seed=100,
     torch.manual_seed(seed)       # Random manual seed for randomization
 
     X = data[["TB_V19", "TB_H19", "TB_V22", "TB_V37", "TB_H37"]].values        # Input to model: TBs for different channels "GR_V", "GR_H", "PR_19", "PR_37"
-    y = data[["SIT", "X_SIT", "Y_SIT"]].values                     # Model predict: SIT
+    y = data[["SIT"]].values # , "X_SIT", "Y_SIT"]].values                     # Model predict: SIT
 
     # Scale data
     scaler = StandardScaler()
@@ -66,9 +57,9 @@ def train_model(data, seed=100,
     
     X_train = torch.FloatTensor(X_train)
     X_test = torch.FloatTensor(X_test)
-    y_train = torch.FloatTensor(y_train[:,0]).unsqueeze(1)
-    y_test_xy = y_test[:,1:]
-    y_test = torch.FloatTensor(y_test[:,0]).unsqueeze(1)
+    y_train = torch.FloatTensor(y_train) #y_train = torch.FloatTensor(y_train[:,0]).unsqueeze(1)
+    #y_test_xy = y_test[:,1:]
+    y_test = torch.FloatTensor(y_test) #y_test = torch.FloatTensor(y_test[:,0]).unsqueeze(1)
 
     # Criterion of model to measure the error
     model = Model()              # Instance for model
@@ -110,7 +101,7 @@ def train_model(data, seed=100,
             "model_state_dict": model.state_dict(),
             "scaler": scaler
         }
-        torch.save(model_save,"/Users/theajonsson/Desktop/SSMIS_1month.pth")
+        torch.save(model_save,"/Users/theajonsson/Desktop/SSMIS_1wintermonth.pth")
 
     
 
@@ -282,17 +273,17 @@ def train_model(data, seed=100,
             plt.grid(True)
             plt.ylim(0, 5)
             plt.xlim(0, 5)
-            plt.savefig("/Users/theajonsson/Desktop/SSMIS_1month.png", dpi=300, bbox_inches="tight")
+            plt.savefig("/Users/theajonsson/Desktop/SSMIS_1wintermonth.png", dpi=300, bbox_inches="tight")
             plt.show()
 
         if True: 
-            plt.hist(y_test_np, bins=100, color='blue', alpha=0.5 ,edgecolor='black', zorder=3, label="True SIT", histtype='stepfilled')
-            plt.hist(y_pred_np, bins=100, color='red', edgecolor='black', zorder=1, label="Predicted SIT", histtype='stepfilled')
+            plt.hist(y_test_np, bins=100, color='blue', alpha=0.5 ,edgecolor='black', zorder=3, label="True SIT", range=(y_test_np.min(), y_test_np.max()))
+            plt.hist(y_pred_np, bins=100, color='red', edgecolor='black', zorder=1, label="Predicted SIT", range=(y_test_np.min(), y_test_np.max()))
             plt.title("Overlay")
             plt.xlabel("Sea Ice Thickness [m]")
             plt.ylabel("Amount [n]")
             plt.legend()
-            plt.savefig("/Users/theajonsson/Desktop/SSMIS_1month_hist.png", dpi=300, bbox_inches="tight")
+            plt.savefig("/Users/theajonsson/Desktop/SSMIS_1wintermonth_hist.png", dpi=300, bbox_inches="tight")
             plt.show()
 
 
@@ -303,7 +294,7 @@ def train_model(data, seed=100,
 if True:
     start_time = time.time()
     try:
-        data = pd.read_csv("/Users/theajonsson/Desktop/TD_SSMIS_1month_200603.csv")
+        data = pd.read_csv("/Users/theajonsson/Desktop/TD_SSMIS_matched_2011_2012.csv")
     except FileNotFoundError:
         print("Error")
     train_model(data, epochs=1000, lr=0.01)

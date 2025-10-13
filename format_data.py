@@ -8,13 +8,81 @@ Function:   format_SIT, nearest_neighbor, split_tracks, format_SSM_I, format_SSM
 Other:      Created by Thea Jonsson 2025-08-28
 """
 
+import time
 import netCDF4 as nc
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from ll_xy import lonlat_to_xy
 from scipy.spatial import KDTree
+from scipy.ndimage import distance_transform_edt
+from cartoplot import cartoplot
 
+
+"""
+Function:   nearest_neighbor
+Purpose:    Find closest TB data point to each SIT data point
+
+Input:      x (float): x coordinates for SIT and TB
+            y (float): y coordinates for SIT and TB
+            TB (float)
+Return:     distances (float): distance from each SIT point to its nearest TB point
+            nearest_TB_coords (float): coordinates of that nearest TB point
+            TB_freq (float): corresponding TB value (for choosen frequency) at that nearest point
+"""
+def nearest_neighbor(x_SIT, y_SIT, x_TB, y_TB, TB):
+
+    SIT_coord = np.column_stack((x_SIT, y_SIT))
+    TB_coord = np.column_stack((x_TB, y_TB))
+
+    tree = KDTree(TB_coord)                         # K-Dimensional Tree on TB coordinates 
+    distances, indices = tree.query(SIT_coord)      # Queries the tree to find closest TB coordinate point for each SIT coordinate point
+
+    nearest_TB_coords = TB_coord[indices]           # Coordinates of nearest TB point
+    TB_data = TB[indices]                           # TB value at that point
+
+    return distances, nearest_TB_coords, TB_data
+
+
+
+
+
+"""
+Function:   land_mask
+Purpose:    Create a mask of with a distance from land and corresponding coordiantes 
+
+Input:      
+Return:     
+"""
+def land_mask(min_distance_km=50, lat_level=60):
+
+    d = nc.Dataset("NSIDC0772_LatLon_EASE2_N3.125km_v1.1.nc", "r", format="NETCDF4")
+    lats = np.array(d['latitude'])
+    lons = np.array(d['longitude'])
+    d.close()
+
+    grid_dir = "EASE2_N3.125km.LOCImask_land50_coast0km.5760x5760.bin"
+    land_data = np.fromfile(grid_dir, dtype=np.uint8).reshape(5760, 5760)
+
+    land_binary = np.isin(land_data, [0, 101, 252]).astype(np.uint8)
+
+    # Distance from land
+    dist_pixels = distance_transform_edt(1 - land_binary)
+    dist_km = dist_pixels * 3.125  # each pixel = 3.125 km
+
+    # Keep only water pixels (255) that are >= min_distance_km away from land
+    water_mask = (land_data == 255) & (dist_km >= min_distance_km)
+
+    lats_flat = lats.flatten()
+    lons_flat = lons.flatten()
+    water_flat = water_mask.flatten()
+
+    valid = (~np.isnan(lats_flat)) & (lats_flat >= lat_level) & water_flat
+    lats_valid = lats_flat[valid]
+    lons_valid = lons_flat[valid]
+    land_mask_data = np.full_like(lats_valid, 255, dtype=np.uint8)  # all are valid water
+
+    return lons_valid, lats_valid, land_mask_data
 
 
 
@@ -44,39 +112,17 @@ def format_SIT(file_paths, lat_level=60, hemisphere="n"):
     lon_SIT = lon_SIT[mask]
     SIT = SIT[mask]
 
-    x_SIT,y_SIT = lonlat_to_xy(lon_SIT, lat_SIT, hemisphere)
-  
-    x_SIT = x_SIT[:len(SIT)]
-    y_SIT = y_SIT[:len(SIT)]
+    lons_valid, lats_valid, land_mask_data = land_mask()
+    distances, nearest_coords, land_mask_data = nearest_neighbor(lon_SIT, lat_SIT, lons_valid, lats_valid, land_mask_data)
+
+    x_SIT,y_SIT = lonlat_to_xy(nearest_coords[:,1], nearest_coords[:,0], hemisphere)
+
+    mask = land_mask_data == 255
+    x_SIT = x_SIT[mask]
+    y_SIT = y_SIT[mask]
+    SIT = SIT[mask]
 
     return x_SIT, y_SIT, SIT
-
-
-
-
-"""
-Function:   nearest_neighbor
-Purpose:    Find closest TB data point to each SIT data point
-
-Input:      x (float): x coordinates for SIT and TB
-            y (float): y coordinates for SIT and TB
-            TB (float)
-Return:     distances (float): distance from each SIT point to its nearest TB point
-            nearest_TB_coords (float): coordinates of that nearest TB point
-            TB_freq (float): corresponding TB value (for choosen frequency) at that nearest point
-"""
-def nearest_neighbor(x_SIT, y_SIT, x_TB, y_TB, TB):
-
-    SIT_coord = np.column_stack((x_SIT, y_SIT))
-    TB_coord = np.column_stack((x_TB, y_TB))
-
-    tree = KDTree(TB_coord)                         # K-Dimensional Tree on TB coordinates 
-    distances, indices = tree.query(SIT_coord)      # Queries the tree to find closest TB coordinate point for each SIT coordinate point
-
-    nearest_TB_coords = TB_coord[indices]           # Coordinates of nearest TB point
-    TB_freq = TB[indices]                           # TB value at that point
-
-    return distances, nearest_TB_coords, TB_freq
 
 
 
@@ -86,8 +132,8 @@ def nearest_neighbor(x_SIT, y_SIT, x_TB, y_TB, TB):
 Function:   split_tracks
 Purpose:    
 
-Input:      df ():
-Return:     df_seg():
+Input:      
+Return:     
 """
 def split_tracks(df, distance_segment = 50000):
 
@@ -260,7 +306,7 @@ Return:     x_TB (float)
             TB_freq (float): nearest TB values in realationship to the SIT values
             nearest_TB_coords (float, (N,2)-array)
 """
-def format_SSMIS(x_SIT, y_SIT, file_paths, group, channel, 
+def format_SSMIS(x_SIT, y_SIT, file_paths, group, channel, lons_valid, lats_valid, land_mask_data,
                  lat_level=60, hemisphere="n", debug=False):
     
     dataset = nc.Dataset(file_paths, "r", format="NETCDF4")
@@ -274,8 +320,15 @@ def format_SSMIS(x_SIT, y_SIT, file_paths, group, channel,
     lat_TB = lat_TB[mask]
     lon_TB = lon_TB[mask]
     TB = TB[mask]
+
+    distances, nearest_coords, land_mask_data = nearest_neighbor(lon_TB, lat_TB, lons_valid, lats_valid, land_mask_data)
   
-    x_TB,y_TB = lonlat_to_xy(lon_TB, lat_TB, hemisphere)
+    x_TB,y_TB = lonlat_to_xy(nearest_coords[:,1], nearest_coords[:,0], hemisphere)
+
+    mask = land_mask_data == 255
+    x_TB = x_TB[mask]
+    y_TB = y_TB[mask]
+    TB = TB[mask]
 
     distances, nearest_TB_coords, TB_freq = nearest_neighbor(x_SIT, y_SIT, x_TB, y_TB, TB)
 

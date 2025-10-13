@@ -32,7 +32,7 @@ lat_level = 60
 
 # Training data (.csv) used for the NN.py for ONE MONTH
 """ ========================================================================================== """
-if False:
+if True:
 
   columns = ["TB_V19", "TB_H19", "TB_V22", "TB_V37", "TB_H37", "SIT", "X_SIT", "Y_SIT", "GR_V", "GR_H", "PR_19", "PR_37"]
   df_TB_SSMIS = pd.DataFrame(columns=columns) 
@@ -48,11 +48,13 @@ if False:
   all_TB_V37 = np.array([])
   all_TB_H37 = np.array([])
 
-  folder_path_SIT = "/Volumes/Thea_SSD_1T/Master Thesis/Envisat_SatSwath/2006/03/"
-  folder_path_SSMIS = "/Volumes/Thea_SSD_1T/TB_2006_03_SSMIS/"
+  folder_path_SIT = "/Volumes/Thea_SSD_1T/Master Thesis/Envisat_SatSwath/2011/03"
+  folder_path_SSMIS = "/Volumes/Thea_SSD_1T/TB_SSMIS/2011/03/"
 
   files_SIT = sorted([f for f in os.listdir(folder_path_SIT) if f[0].isalnum()])
   files_SSMIS = sorted([f for f in os.listdir(folder_path_SSMIS) if f[0].isalnum()])
+
+  lons_valid, lats_valid, land_mask_data = fd.land_mask()
 
   for file_SIT, file_SSMIS in zip(files_SIT, files_SSMIS):
 
@@ -72,7 +74,7 @@ if False:
       else:
          vh = [1, 0]
       for j in range(len(vh)):
-        x_TB_SSMIS, y_TB_SSMIS, TB_SSMIS, near_TB, nearest_TB_coords = fd.format_SSMIS(x_SIT, y_SIT, path_SSMIS, group_SSMIS[i], vh[j], debug=False)
+        x_TB_SSMIS, y_TB_SSMIS, TB_SSMIS, near_TB, nearest_TB_coords = fd.format_SSMIS(x_SIT, y_SIT, path_SSMIS, group_SSMIS[i], vh[j], lons_valid, lats_valid, land_mask_data, debug=False)
 
         if index == 0:
           all_TB_V19 = np.append(all_TB_V19, near_TB)
@@ -111,11 +113,12 @@ if False:
   df_TB_SSMIS["PR_19"] = (df_TB_SSMIS["TB_V19"] - df_TB_SSMIS["TB_H19"])/(df_TB_SSMIS["TB_V19"] + df_TB_SSMIS["TB_H19"])
   df_TB_SSMIS["PR_37"] = (df_TB_SSMIS["TB_V37"] - df_TB_SSMIS["TB_H37"])/(df_TB_SSMIS["TB_V37"] + df_TB_SSMIS["TB_H37"])
 
-  df_TB_SSMIS.to_csv("/Users/theajonsson/Desktop/TD_SSMIS_1month_200603.csv", index=False)
+  df_TB_SSMIS.to_csv("/Users/theajonsson/Desktop/TD_SSMIS_1month_201103_maskland.csv", index=False)
   print(df_TB_SSMIS.shape)
 
   end_time = time.time()
   print(f"Elapsed time: {end_time - start_time}")
+  
 """ ==========================================================================================
           1 different type of plots to check for different things to consider
 ========================================================================================== """
@@ -149,6 +152,9 @@ if False:
     plt.savefig("/Users/theajonsson/Desktop/TBvsSIT_.png", dpi=300, bbox_inches="tight")
     plt.show()
 
+# Histogram
+plt.hist(df_TB_SSMIS["SIT"])
+plt.savefig("/Users/theajonsson/Desktop/Hist_201011.png", dpi=300, bbox_inches="tight")
 
 
 
@@ -184,19 +190,11 @@ if False:
             df_TB_SSMIS[columns[index]] = TB_freq 
     
             index += 1
-
+    
     df_TB_SSMIS = df_TB_SSMIS.dropna(subset=["TB_V19", "TB_H19", "TB_V22", "TB_V37", "TB_H37"])
 
     # Split the tracks up into segments by distance
     #df_TB_SSMIS = fd.split_tracks(df_TB_SSMIS, distance_segment = 1000)
-
-    """
-    # Gradient ratio (GR) and Polarisation ratio (PR)
-    df_TB_SSMIS["GR_V"] = (df_TB_SSMIS["TB_V37"] - df_TB_SSMIS["TB_V19"])/(df_TB_SSMIS["TB_V37"] + df_TB_SSMIS["TB_V19"])
-    df_TB_SSMIS["GR_H"] = (df_TB_SSMIS["TB_H37"] - df_TB_SSMIS["TB_H19"])/(df_TB_SSMIS["TB_H37"] + df_TB_SSMIS["TB_H19"])
-    df_TB_SSMIS["PR_19"] = (df_TB_SSMIS["TB_V19"] - df_TB_SSMIS["TB_H19"])/(df_TB_SSMIS["TB_V19"] + df_TB_SSMIS["TB_H19"])
-    df_TB_SSMIS["PR_37"] = (df_TB_SSMIS["TB_V37"] - df_TB_SSMIS["TB_H37"])/(df_TB_SSMIS["TB_V37"] + df_TB_SSMIS["TB_H37"])
-    """
 
     df_TB_SSMIS.to_csv("/Users/theajonsson/Desktop/TD_SSMIS_1day.csv", index=False)
     print(df_TB_SSMIS.shape)

@@ -38,7 +38,7 @@ def lonlat_to_xy(coords_1, coords_2, hemisphere, inverse=False):
         
         transformer = Transformer.from_crs(WGS_Proj, EASE_Proj[hemisphere])
         
-        x, y = transformer.transform(lat, lon)
+        x, y = transformer.transform(lon, lat)
         
         return (x, y)
 
@@ -48,6 +48,6 @@ def lonlat_to_xy(coords_1, coords_2, hemisphere, inverse=False):
         
         transformer = Transformer.from_crs(EASE_Proj[hemisphere], WGS_Proj)
         
-        lat, lon = transformer.transform(x, y)
+        lon, lat = transformer.transform(x, y)
         
         return (lon, lat)
